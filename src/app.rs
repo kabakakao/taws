@@ -136,6 +136,9 @@ pub struct App {
     // SSM connect request (instance_id, region, profile)
     pub ssm_connect_request: Option<SsmConnectRequest>,
 
+    // EKS k9s connect request (cluster_name, region, profile)
+    pub eks_connect_request: Option<EksConnectRequest>,
+
     // Fuzzy matcher for filtering (reused to avoid repeated allocations)
     pub fuzzy_matcher: SkimMatcherV2,
 }
@@ -144,6 +147,14 @@ pub struct App {
 #[derive(Debug, Clone)]
 pub struct SsmConnectRequest {
     pub instance_id: String,
+    pub region: String,
+    pub profile: String,
+}
+
+/// EKS k9s Connect request data
+#[derive(Debug, Clone)]
+pub struct EksConnectRequest {
+    pub cluster_name: String,
     pub region: String,
     pub profile: String,
 }
@@ -297,6 +308,7 @@ impl App {
             pagination: PaginationState::default(),
             log_tail_state: None,
             ssm_connect_request: None,
+            eks_connect_request: None,
             fuzzy_matcher: SkimMatcherV2::default().ignore_case(),
         }
     }
@@ -1571,5 +1583,70 @@ impl App {
     /// Take the SSM connect request (clears it)
     pub fn take_ssm_connect_request(&mut self) -> Option<SsmConnectRequest> {
         self.ssm_connect_request.take()
+    }
+
+    // =========================================================================
+    // EKS k9s Connect
+    // =========================================================================
+
+    /// Request k9s connect to the selected EKS cluster
+    /// Returns true if a connect request was made, false otherwise
+    pub fn request_k9s_connect(&mut self) -> bool {
+        // Get the selected item
+        let Some(item) = self.selected_item().cloned() else {
+            return false;
+        };
+
+        // Extract cluster name
+        let cluster_name = extract_json_value(&item, "name");
+        if cluster_name == "-" || cluster_name.is_empty() {
+            self.show_warning("Could not get cluster name");
+            return false;
+        }
+
+        // Check if kubectl is installed
+        if !Self::is_kubectl_installed() {
+            self.show_warning("kubectl is not installed.\n\nhttps://kubernetes.io/docs/tasks/tools/");
+            return false;
+        }
+
+        // Check if k9s is installed
+        if !Self::is_k9s_installed() {
+            self.show_warning("k9s is not installed.\n\nhttps://k9scli.io/topics/install/");
+            return false;
+        }
+
+        // Set the connect request - will be handled by main loop
+        self.eks_connect_request = Some(EksConnectRequest {
+            cluster_name,
+            region: self.region.clone(),
+            profile: self.profile.clone(),
+        });
+
+        true
+    }
+
+    /// Check if kubectl is installed
+    fn is_kubectl_installed() -> bool {
+        std::process::Command::new("kubectl")
+            .arg("version")
+            .arg("--client")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+
+    /// Check if k9s is installed
+    fn is_k9s_installed() -> bool {
+        std::process::Command::new("k9s")
+            .arg("version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+
+    /// Take the EKS k9s connect request (clears it)
+    pub fn take_eks_connect_request(&mut self) -> Option<EksConnectRequest> {
+        self.eks_connect_request.take()
     }
 }

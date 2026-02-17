@@ -14,6 +14,7 @@
       ],
       "sub_resources": [],
       "actions": [
+        { "key": "c", "display_name": "Connect (k9s)", "shortcut": "c", "sdk_method": "k9s_connect" },
         { "key": "ctrl+d", "display_name": "Delete Cluster", "shortcut": "ctrl+d", "sdk_method": "delete_cluster", "confirm": { "message": "Delete EKS cluster", "default_yes": false, "destructive": true } }
       ],
       "api_config": {

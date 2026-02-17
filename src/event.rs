@@ -238,6 +238,10 @@ async fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Result<bool> {
                                         } else if action.sdk_method == "ssm_connect" {
                                             app.request_ssm_connect();
                                             handled = true;
+                                        // Special handling for EKS k9s connect
+                                        } else if action.sdk_method == "k9s_connect" {
+                                            app.request_k9s_connect();
+                                            handled = true;
                                         } else if action.show_result {
                                             // Action that displays result (e.g., get_secret_value)
                                             // These are read-only operations (retrieve and display data),

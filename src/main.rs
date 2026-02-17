@@ -14,7 +14,7 @@ pub const VERSION: &str = match option_env!("TAWS_VERSION") {
 };
 
 use anyhow::Result;
-use app::{App, Mode, SsoLoginState};
+use app::{App, EksConnectRequest, Mode, SsoLoginState};
 use aws::client::ClientResult;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
@@ -177,7 +177,7 @@ async fn main() -> Result<()> {
         }
         Some(Command::ListRegions) => {
             // Output regions for shell completion
-            for region in aws::profiles::list_regions() {
+            for region in aws::profiles::list_regions_hardcoded() {
                 println!("{}", region);
             }
             return Ok(());
@@ -342,7 +342,7 @@ where
 
     let available_profiles =
         aws::profiles::list_profiles().unwrap_or_else(|_| vec!["default".to_string()]);
-    let available_regions = aws::profiles::list_regions();
+    let available_regions = aws::profiles::list_regions(&profile, &region).await;
     splash.complete_step();
 
     if check_abort()? {
@@ -917,6 +917,11 @@ where
             execute_ssm_connect(terminal, &request)?;
         }
 
+        // Handle EKS k9s connect request (requires suspending TUI)
+        if let Some(request) = app.take_eks_connect_request() {
+            execute_k9s_connect(terminal, &request)?;
+        }
+
         // Poll SSO if in waiting state
         if app.mode == Mode::SsoLogin {
             event::poll_sso_if_waiting(app).await;
@@ -988,6 +993,118 @@ where
         }
         Err(e) => {
             println!("\n\x1b[1;31mFailed to start SSM session: {}\x1b[0m", e);
+        }
+    }
+
+    println!("\n\x1b[1;36m>>> Returning to taws... Press any key.\x1b[0m");
+    std::io::stdout().flush()?;
+
+    // Wait for a key press before restoring TUI
+    crossterm::terminal::enable_raw_mode()?;
+    let _ = crossterm::event::read(); // Wait for any key
+    crossterm::terminal::disable_raw_mode()?;
+
+    // Restore TUI
+    crossterm::terminal::enable_raw_mode()?;
+    crossterm::execute!(
+        std::io::stdout(),
+        crossterm::terminal::EnterAlternateScreen,
+        crossterm::cursor::Hide
+    )?;
+    terminal.clear()?;
+
+    Ok(())
+}
+
+/// Execute k9s connect by suspending TUI, updating kubeconfig, and running k9s
+fn execute_k9s_connect<B: Backend>(
+    terminal: &mut Terminal<B>,
+    request: &EksConnectRequest,
+) -> Result<()>
+where
+    B::Error: Send + Sync + 'static,
+{
+    use std::io::Write;
+
+    // Suspend TUI - restore terminal to normal mode
+    crossterm::terminal::disable_raw_mode()?;
+    crossterm::execute!(
+        std::io::stdout(),
+        crossterm::terminal::LeaveAlternateScreen,
+        crossterm::cursor::Show
+    )?;
+
+    // Print connection info
+    println!(
+        "\n\x1b[1;36m>>> Updating kubeconfig for cluster {}...\x1b[0m\n",
+        request.cluster_name
+    );
+    std::io::stdout().flush()?;
+
+    // Update kubeconfig using aws eks update-kubeconfig
+    let update_status = std::process::Command::new("aws")
+        .args([
+            "eks",
+            "update-kubeconfig",
+            "--name",
+            &request.cluster_name,
+            "--region",
+            &request.region,
+            "--profile",
+            &request.profile,
+        ])
+        .status();
+
+    match update_status {
+        Ok(exit_status) => {
+            if !exit_status.success() {
+                let code = exit_status.code().unwrap_or(-1);
+                println!(
+                    "\n\x1b[1;31mFailed to update kubeconfig. Exit code: {}\x1b[0m",
+                    code
+                );
+                println!("\n\x1b[1;36m>>> Returning to taws... Press any key.\x1b[0m");
+                std::io::stdout().flush()?;
+
+                // Wait for a key press before restoring TUI
+                crossterm::terminal::enable_raw_mode()?;
+                let _ = crossterm::event::read();
+                crossterm::terminal::disable_raw_mode()?;
+
+                // Restore TUI
+                crossterm::terminal::enable_raw_mode()?;
+                crossterm::execute!(
+                    std::io::stdout(),
+                    crossterm::terminal::EnterAlternateScreen,
+                    crossterm::cursor::Hide
+                )?;
+                terminal.clear()?;
+
+                return Ok(());
+            }
+
+            // Kubeconfig updated successfully, now start k9s
+            println!("\n\x1b[1;36m>>> Starting k9s...\x1b[0m\n");
+            std::io::stdout().flush()?;
+
+            let k9s_status = std::process::Command::new("k9s")
+                .args(["--context", &format!("arn:aws:eks:{}:*:cluster/{}", request.region, request.cluster_name)])
+                .status();
+
+            match k9s_status {
+                Ok(exit_status) => {
+                    if !exit_status.success() {
+                        let code = exit_status.code().unwrap_or(-1);
+                        println!("\n\x1b[1;33mk9s exited with code: {}\x1b[0m", code);
+                    }
+                }
+                Err(e) => {
+                    println!("\n\x1b[1;31mFailed to start k9s: {}\x1b[0m", e);
+                }
+            }
+        }
+        Err(e) => {
+            println!("\n\x1b[1;31mFailed to update kubeconfig: {}\x1b[0m", e);
         }
     }
 

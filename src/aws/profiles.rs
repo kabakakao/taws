@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
+use tracing::{debug, warn};
 
 /// List all AWS profiles from ~/.aws/credentials and ~/.aws/config
 pub fn list_profiles() -> Result<Vec<String>> {
@@ -48,8 +49,67 @@ pub fn list_profiles() -> Result<Vec<String>> {
     Ok(profiles)
 }
 
-/// List common AWS regions
-pub fn list_regions() -> Vec<String> {
+/// Fetch AWS regions dynamically from AWS API
+/// Uses EC2 DescribeRegions API to get all enabled regions
+pub async fn fetch_regions_from_aws(profile: &str, region: &str) -> Result<Vec<String>> {
+    use crate::aws::client::AwsClients;
+    use quick_xml::de::from_str;
+    use serde::Deserialize;
+
+    #[derive(Debug, Deserialize)]
+    struct DescribeRegionsResponse {
+        #[serde(rename = "regionInfo")]
+        region_info: RegionInfo,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct RegionInfo {
+        #[serde(rename = "item", default)]
+        items: Vec<RegionItem>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct RegionItem {
+        #[serde(rename = "regionName")]
+        region_name: String,
+    }
+
+    debug!("Fetching AWS regions dynamically using profile '{}' and region '{}'", profile, region);
+
+    // Create AWS client
+    let (client, _) = AwsClients::new(profile, region, None).await?;
+
+    // Call DescribeRegions API with filters for opted-in regions
+    let params = vec![
+        ("Action", "DescribeRegions"),
+        ("Version", "2016-11-15"),
+        ("Filter.1.Name", "opt-in-status"),
+        ("Filter.1.Value.1", "opt-in-not-required"),
+        ("Filter.1.Value.2", "opted-in"),
+    ];
+
+    let response = client.http.call("ec2", params, None).await?;
+
+    // Parse XML response
+    let parsed: DescribeRegionsResponse = from_str(&response)
+        .map_err(|e| anyhow::anyhow!("Failed to parse DescribeRegions response: {}", e))?;
+
+    let mut regions: Vec<String> = parsed
+        .region_info
+        .items
+        .into_iter()
+        .map(|item| item.region_name)
+        .collect();
+
+    regions.sort();
+    debug!("Fetched {} regions from AWS", regions.len());
+
+    Ok(regions)
+}
+
+/// List common AWS regions (hardcoded fallback)
+/// This is used as a fallback if dynamic region fetching fails
+pub fn list_regions_hardcoded() -> Vec<String> {
     vec![
         "us-east-1".to_string(),
         "us-east-2".to_string(),
@@ -78,7 +138,26 @@ pub fn list_regions() -> Vec<String> {
         "me-south-1".to_string(),
         "me-central-1".to_string(),
         "sa-east-1".to_string(),
+        "eusc-de-east-1".to_string(),
     ]
+}
+
+/// List AWS regions - tries to fetch dynamically, falls back to hardcoded list
+pub async fn list_regions(profile: &str, region: &str) -> Vec<String> {
+    match fetch_regions_from_aws(profile, region).await {
+        Ok(regions) => {
+            if regions.is_empty() {
+                warn!("Dynamic region fetch returned empty list, using hardcoded fallback");
+                list_regions_hardcoded()
+            } else {
+                regions
+            }
+        }
+        Err(e) => {
+            warn!("Failed to fetch regions dynamically: {}, using hardcoded fallback", e);
+            list_regions_hardcoded()
+        }
+    }
 }
 
 fn get_aws_credentials_path() -> Option<PathBuf> {
