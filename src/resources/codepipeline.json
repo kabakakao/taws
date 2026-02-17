@@ -10,12 +10,12 @@
       "name_field": "name",
       "is_global": false,
       "columns": [
-        { "header": "PIPELINE NAME", "json_path": "name", "width": 35 },
-        { "header": "VERSION", "json_path": "version", "width": 10 },
-        { "header": "CREATED", "json_path": "created", "width": 25 },
-        { "header": "UPDATED", "json_path": "updated", "width": 25 }
+        { "header": "PIPELINE NAME", "json_path": "name", "width": 60 },
+        { "header": "VERSION", "json_path": "version", "width": 10 }
       ],
-      "sub_resources": [],
+      "sub_resources": [
+        { "shortcut": "e", "display_name": "Executions", "resource_key": "codepipeline-executions", "parent_id_field": "name", "filter_param": "pipeline_name" }
+      ],
       "actions": [],
       "api_config": {
         "protocol": "json",
@@ -24,9 +24,42 @@
       },
       "field_mappings": {
         "name": { "source": "/name", "default": "-" },
-        "version": { "source": "/version", "default": "0" },
-        "created": { "source": "/created", "default": "-" },
-        "updated": { "source": "/updated", "default": "-" }
+        "version": { "source": "/version", "default": "0" }
+      }
+    },
+    "codepipeline-executions": {
+      "display_name": "Pipeline Executions",
+      "service": "codepipeline",
+      "sdk_method": "list_pipeline_executions",
+      "sdk_method_params": {},
+      "response_path": "pipelineExecutionSummaries",
+      "id_field": "pipelineExecutionId",
+      "name_field": "pipelineExecutionId",
+      "is_global": false,
+      "requires_parent": true,
+      "columns": [
+        { "header": "EXECUTION ID", "json_path": "pipelineExecutionId", "width": 40 },
+        { "header": "STATUS", "json_path": "status", "width": 15, "color_map": "state" },
+        { "header": "START TIME", "json_path": "startTime", "width": 25 },
+        { "header": "LAST UPDATE", "json_path": "lastUpdateTime", "width": 25 },
+        { "header": "TRIGGER", "json_path": "trigger", "width": 30 }
+      ],
+      "sub_resources": [],
+      "actions": [],
+      "api_config": {
+        "protocol": "json",
+        "action": "ListPipelineExecutions",
+        "response_root": "/pipelineExecutionSummaries",
+        "param_mapping": {
+          "pipeline_name": "pipelineName"
+        }
+      },
+      "field_mappings": {
+        "pipelineExecutionId": { "source": "/pipelineExecutionId", "default": "-" },
+        "status": { "source": "/status", "default": "-" },
+        "startTime": { "source": "/startTime", "default": "-" },
+        "lastUpdateTime": { "source": "/lastUpdateTime", "default": "-" },
+        "trigger": { "source": "/trigger/triggerType", "default": "-" }
       }
     }
   }

@@ -24,7 +24,13 @@
       { "value": "terminating", "color": [255, 255, 0] },
       { "value": "in-progress", "color": [255, 255, 0] },
       { "value": "initializing", "color": [255, 255, 0] },
-      { "value": "rebooting", "color": [255, 255, 0] }
+      { "value": "rebooting", "color": [255, 255, 0] },
+      { "value": "Succeeded", "color": [0, 255, 0] },
+      { "value": "Failed", "color": [255, 0, 0] },
+      { "value": "InProgress", "color": [255, 255, 0] },
+      { "value": "Stopped", "color": [255, 0, 0] },
+      { "value": "Stopping", "color": [255, 255, 0] },
+      { "value": "Superseded", "color": [128, 128, 128] }
     ],
     "bool": [
       { "value": "true", "color": [0, 255, 255] },
