@@ -100,6 +100,30 @@ pub struct ApiConfig {
     /// For composite operations, the sequence of operations
     #[serde(default)]
     pub operations: Vec<CompositeOperation>,
+
+    /// Per-item enrichment: make an additional API call per list item
+    /// to add extra fields (e.g., latest execution status for pipelines)
+    #[serde(default)]
+    pub enrich: Option<ListEnrichConfig>,
+}
+
+/// Configuration for per-item list enrichment
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct ListEnrichConfig {
+    /// API action to call (e.g., "ListPipelineExecutions")
+    pub action: String,
+    /// Field from the list item to use as identifier
+    pub id_field: String,
+    /// API parameter name to pass the identifier as
+    pub param_name: String,
+    /// Static parameters to include
+    #[serde(default)]
+    pub static_params: HashMap<String, Value>,
+    /// Path to extract the result from the response (JSON pointer)
+    #[serde(default)]
+    pub response_path: Option<String>,
+    /// Map of target_field -> source path within the (first) result item
+    pub fields: HashMap<String, String>,
 }
 
 /// A single operation in a composite API call

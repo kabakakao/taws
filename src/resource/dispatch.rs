@@ -114,8 +114,63 @@ pub async fn invoke_list(
         )
         .await?;
 
+    // Apply per-item enrichment if configured
+    let items = if let Some(ref enrich) = api_config.enrich {
+        let mut enriched = parsed.items;
+        for item in enriched.iter_mut() {
+            let id = item
+                .get(&enrich.id_field)
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            if id.is_empty() {
+                continue;
+            }
+
+            let mut body = serde_json::Map::new();
+            body.insert(enrich.param_name.clone(), json!(id));
+            for (k, v) in &enrich.static_params {
+                body.insert(k.clone(), v.clone());
+            }
+
+            if let Ok(resp) = clients
+                .http
+                .json_request(service, &enrich.action, &serde_json::to_string(&Value::Object(body)).unwrap_or_default())
+                .await
+            {
+                if let Ok(json) = serde_json::from_str::<Value>(&resp) {
+                    // Navigate to response_path, take first element if array
+                    let data = match enrich.response_path.as_deref() {
+                        Some(path) => {
+                            let v = json.pointer(path).cloned().unwrap_or(Value::Null);
+                            match v {
+                                Value::Array(arr) => arr.into_iter().next().unwrap_or(Value::Null),
+                                other => other,
+                            }
+                        }
+                        None => json,
+                    };
+                    if let Value::Object(ref mut map) = item {
+                        for (target, source) in &enrich.fields {
+                            let val = data.pointer(source).cloned().unwrap_or(Value::String("-".into()));
+                            let val = match val {
+                                Value::String(_) => val,
+                                Value::Number(n) => Value::String(n.to_string()),
+                                Value::Bool(b) => Value::String(b.to_string()),
+                                other => other,
+                            };
+                            map.insert(target.clone(), val);
+                        }
+                    }
+                }
+            }
+        }
+        enriched
+    } else {
+        parsed.items
+    };
+
     Ok(build_response(
-        parsed.items,
+        items,
         &resource_def.response_path,
         parsed.next_token,
     ))

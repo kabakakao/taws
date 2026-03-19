@@ -10,8 +10,9 @@
       "name_field": "name",
       "is_global": false,
       "columns": [
-        { "header": "PIPELINE NAME", "json_path": "name", "width": 60 },
-        { "header": "VERSION", "json_path": "version", "width": 10 }
+        { "header": "PIPELINE NAME", "json_path": "name", "width": 45 },
+        { "header": "VERSION", "json_path": "version", "width": 10 },
+        { "header": "LATEST STATUS", "json_path": "latestExecutionStatus", "width": 15, "color_map": "state" }
       ],
       "sub_resources": [
         { "shortcut": "e", "display_name": "Executions", "resource_key": "codepipeline-executions", "parent_id_field": "name", "filter_param": "pipeline_name" }
@@ -20,7 +21,17 @@
       "api_config": {
         "protocol": "json",
         "action": "ListPipelines",
-        "response_root": "/pipelines"
+        "response_root": "/pipelines",
+        "enrich": {
+          "action": "ListPipelineExecutions",
+          "id_field": "name",
+          "param_name": "pipelineName",
+          "static_params": { "maxResults": 1 },
+          "response_path": "/pipelineExecutionSummaries",
+          "fields": {
+            "latestExecutionStatus": "/status"
+          }
+        }
       },
       "field_mappings": {
         "name": { "source": "/name", "default": "-" },
