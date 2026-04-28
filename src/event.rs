@@ -210,6 +210,11 @@ async fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Result<bool> {
             }
         }
 
+        // Column sorting: > next column, < previous column, ! toggle direction
+        KeyCode::Char('>') => app.sort_next_column(),
+        KeyCode::Char('<') => app.sort_prev_column(),
+        KeyCode::Char('!') => app.toggle_sort_direction(),
+
         // Dynamic shortcuts: sub-resources and EC2 actions
         _ => {
             if let KeyCode::Char(c) = key.code {

@@ -203,6 +203,10 @@ pub struct App {
 
     // Fuzzy matcher for filtering (reused to avoid repeated allocations)
     pub fuzzy_matcher: SkimMatcherV2,
+
+    // Interactive column sort state
+    pub sort_column_index: Option<usize>,
+    pub sort_descending: bool,
 }
 
 /// SSM Connect request data
@@ -347,7 +351,7 @@ impl App {
     ) -> Self {
         let filtered_items = initial_items.clone();
 
-        Self {
+        let mut app = Self {
             clients,
             current_resource_key: "ec2-instances".to_string(),
             items: initial_items,
@@ -394,7 +398,11 @@ impl App {
             log_tail_state: None,
             ssm_connect_request: None,
             fuzzy_matcher: SkimMatcherV2::default().ignore_case(),
-        }
+            sort_column_index: None,
+            sort_descending: false,
+        };
+        app.init_sort_from_resource();
+        app
     }
 
     /// Check if auto-refresh is needed
@@ -709,6 +717,9 @@ impl App {
         if self.selected >= self.filtered_items.len() && !self.filtered_items.is_empty() {
             self.selected = self.filtered_items.len() - 1;
         }
+
+        // Re-apply column sort after filtering
+        self.apply_column_sort();
     }
 
     /// Start a new filter, clearing any existing AWS filters
@@ -731,6 +742,101 @@ impl App {
         self.aws_filters = None;
         self.filters_autocomplete_shown = false;
         self.apply_filter();
+    }
+
+    /// Initialize sort state from resource definition defaults
+    pub fn init_sort_from_resource(&mut self) {
+        if let Some(resource) = self.current_resource() {
+            let sort_json_path = resource
+                .sort_field
+                .as_deref()
+                .unwrap_or(&resource.name_field);
+            self.sort_column_index = resource
+                .columns
+                .iter()
+                .position(|col| col.json_path == sort_json_path);
+            self.sort_descending = resource.sort_order.as_deref() == Some("desc");
+        } else {
+            self.sort_column_index = None;
+            self.sort_descending = false;
+        }
+    }
+
+    /// Sort filtered_items by the currently selected column
+    pub fn apply_column_sort(&mut self) {
+        let Some(col_idx) = self.sort_column_index else {
+            return;
+        };
+        let Some(resource) = self.current_resource() else {
+            return;
+        };
+        let Some(col) = resource.columns.get(col_idx) else {
+            return;
+        };
+        let json_path = col.json_path.clone();
+        let descending = self.sort_descending;
+        self.filtered_items.sort_by(|a, b| {
+            let a_val = a
+                .get(&json_path)
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let b_val = b
+                .get(&json_path)
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if descending {
+                b_val.cmp(a_val)
+            } else {
+                a_val.cmp(b_val)
+            }
+        });
+    }
+
+    /// Move sort to the next column (wraps around)
+    pub fn sort_next_column(&mut self) {
+        let Some(resource) = self.current_resource() else {
+            return;
+        };
+        let num_cols = resource.columns.len();
+        if num_cols == 0 {
+            return;
+        }
+        let current = self.sort_column_index.unwrap_or(0);
+        let next = (current + 1) % num_cols;
+        if self.sort_column_index == Some(next) {
+            // Same column after wrap — toggle direction
+            self.sort_descending = !self.sort_descending;
+        } else {
+            self.sort_column_index = Some(next);
+            self.sort_descending = false;
+        }
+        self.apply_column_sort();
+    }
+
+    /// Move sort to the previous column (wraps around)
+    pub fn sort_prev_column(&mut self) {
+        let Some(resource) = self.current_resource() else {
+            return;
+        };
+        let num_cols = resource.columns.len();
+        if num_cols == 0 {
+            return;
+        }
+        let current = self.sort_column_index.unwrap_or(0);
+        let prev = if current == 0 { num_cols - 1 } else { current - 1 };
+        if self.sort_column_index == Some(prev) {
+            self.sort_descending = !self.sort_descending;
+        } else {
+            self.sort_column_index = Some(prev);
+            self.sort_descending = false;
+        }
+        self.apply_column_sort();
+    }
+
+    /// Toggle sort direction (asc/desc) on the current column
+    pub fn toggle_sort_direction(&mut self) {
+        self.sort_descending = !self.sort_descending;
+        self.apply_column_sort();
     }
 
     /// Check if the current resource supports filtering via AWS API
@@ -1242,6 +1348,9 @@ impl App {
         // Reset pagination for new resource
         self.reset_pagination();
 
+        // Initialize sort state from resource defaults
+        self.init_sort_from_resource();
+
         self.refresh_current().await?;
         Ok(())
     }
@@ -1314,6 +1423,9 @@ impl App {
         // Reset pagination for new resource
         self.reset_pagination();
 
+        // Initialize sort state from resource defaults
+        self.init_sort_from_resource();
+
         self.refresh_current().await?;
         Ok(())
     }
@@ -1332,6 +1444,9 @@ impl App {
 
             // Reset pagination for parent resource
             self.reset_pagination();
+
+            // Initialize sort state from resource defaults
+            self.init_sort_from_resource();
 
             self.refresh_current().await?;
         }

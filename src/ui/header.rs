@@ -251,6 +251,8 @@ fn render_keybindings_col2(f: &mut Frame, app: &App, area: Rect) {
         bindings.push(("<[>", "Prev Page"));
     }
 
+    bindings.push(("< >", "Sort Column"));
+    bindings.push(("<!>", "Sort Asc/Desc"));
     bindings.push(("<esc>", "Back"));
     bindings.push(("<ctrl-c>", "Quit"));
 

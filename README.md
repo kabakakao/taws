@@ -36,6 +36,7 @@
 - **Resource Actions** - Start, stop, terminate EC2 instances directly
 - **Detailed Views** - JSON/YAML view of resource details
 - **Filtering** - Filter resources locally with fuzzy matching, or by AWS tags (server-side) for supported resources
+- **Column Sorting** - Sort any resource table by column with `<` / `>` keys, toggle direction with `!`
 - **Autocomplete** - Smart resource type autocomplete with fuzzy matching
 
 ---
@@ -357,6 +358,10 @@ After adding the completion script, restart your shell or source the config file
 | Filter | `/` | Filter resources |
 | Region shortcuts | `0-5` | Quick switch to common regions |
 | Quit | `Ctrl-c` | Exit taws |
+| **Sorting** | | |
+| Next sort column | `>` | Move sort indicator to next column |
+| Previous sort column | `<` | Move sort indicator to previous column |
+| Toggle sort direction | `!` | Toggle between ascending (↑) and descending (↓) |
 | **EC2 Actions** | | |
 | Connect (SSM) | `c` | Open SSM shell session to instance |
 | Start instance | `s` | Start selected EC2 instance |

@@ -679,4 +679,37 @@ mod tests {
             "ECR repositories should have images sub-resource"
         );
     }
+
+    #[test]
+    fn test_sort_field_resolves_to_column_index() {
+        // Verify that sort_field maps to a valid column index for all resources that define it
+        let registry = get_registry();
+        for (key, resource) in &registry.resources {
+            if let Some(ref sort_field) = resource.sort_field {
+                let col_idx = resource
+                    .columns
+                    .iter()
+                    .position(|col| col.json_path == *sort_field);
+                assert!(
+                    col_idx.is_some(),
+                    "Resource '{}' has sort_field '{}' that doesn't match any column json_path",
+                    key,
+                    sort_field
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_all_resources_have_sortable_columns() {
+        // Every resource should have at least one column that can be sorted
+        let registry = get_registry();
+        for (key, resource) in &registry.resources {
+            assert!(
+                !resource.columns.is_empty(),
+                "Resource '{}' has no columns to sort by",
+                key
+            );
+        }
+    }
 }

@@ -231,18 +231,11 @@ fn render_dynamic_table(f: &mut Frame, app: &App, area: Rect) {
         .collect();
 
     // Build header from column definitions with left padding
-    // Determine which column is the sort column (sort_field or name_field fallback)
-    let sort_field = resource
-        .sort_field
-        .as_deref()
-        .unwrap_or(&resource.name_field);
-    let sort_arrow = if resource.sort_order.as_deref() == Some("desc") {
-        "↓"
-    } else {
-        "↑"
-    };
-    let header_cells = resource.columns.iter().map(|col| {
-        let label = if col.json_path == sort_field {
+    // Use app's interactive sort state for the sort indicator
+    let sort_col_idx = app.sort_column_index;
+    let sort_arrow = if app.sort_descending { "↓" } else { "↑" };
+    let header_cells = resource.columns.iter().enumerate().map(|(idx, col)| {
+        let label = if sort_col_idx == Some(idx) {
             format!(" {}{}", col.header, sort_arrow)
         } else {
             format!(" {}", col.header)

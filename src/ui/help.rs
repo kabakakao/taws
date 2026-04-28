@@ -62,6 +62,8 @@ pub fn render(f: &mut Frame, app: &App) {
         create_key_line("]", "Next page (load more)"),
         create_key_line("[", "Previous page"),
         create_key_line("R", "Refresh list"),
+        create_key_line("< / >", "Sort by column"),
+        create_key_line("!", "Toggle sort asc/desc"),
         Line::from(""),
         create_section("Views"),
         create_key_line("d / Enter", "Show details panel"),
